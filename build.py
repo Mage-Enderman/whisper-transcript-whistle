@@ -42,15 +42,20 @@ EXE = ".exe" if IS_WIN else ""
 WHISPER_REPO = "https://github.com/ggerganov/whisper.cpp"
 WHISPER_TAG = "v1.9.1"
 
-# Static ffmpeg downloads (single self-contained binary), pinned by SHA-256.
-# These hashes pin the CURRENT upstream build. If upstream publishes a new one,
-# the build fails loudly with a checksum mismatch (a tamper-evident signal) —
-# download the new file, confirm it's legitimate, and update the hash here.
-FFMPEG_MAC = "https://evermeet.cx/ffmpeg/getrelease/zip"
+# Static ffmpeg downloads, verified by SHA-256 (build fails loudly on mismatch).
+#
+# macOS: pinned to a specific evermeet version — a permanent, immutable URL, so
+#   this never changes on its own.
+# Windows: tracks BtbN's "latest" build. There is no free host that keeps
+#   permanent version-pinned Windows static builds (gyan and BtbN both prune old
+#   versions), so this URL rolls forward. When it does, the build fails with a
+#   checksum mismatch — re-hash the new file (confirm it's legit) and update
+#   below. A truly permanent fix would mirror the binary in our own releases.
+FFMPEG_MAC = "https://evermeet.cx/ffmpeg/ffmpeg-8.1.2.zip"
 FFMPEG_MAC_SHA256 = "e91df72a1ee7c26606f90dd2dd4dcccc6a75140ff9ea6fdd50faae828b82ba69"
 FFMPEG_WIN = ("https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
               "ffmpeg-master-latest-win64-lgpl.zip")
-FFMPEG_WIN_SHA256 = "9e2c17188ffbcc35f03d4f3e27f3844dec3075d4da686c67917d3b027f5bee1a"
+FFMPEG_WIN_SHA256 = "3407e8a9b79fc56791f78e56ea97e709ac06d8e60b1de592dc63da6a15dfeb4f"
 
 
 def run(cmd, **kw):

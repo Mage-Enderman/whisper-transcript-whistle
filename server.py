@@ -83,8 +83,7 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024   # reject uploads larger than 8 GB
 MAX_JSON_BYTES = 64 * 1024                   # control-plane JSON bodies are tiny
 MAX_JOBS = 50                                # cap in-memory job history
 MODEL_MIN_BYTES = 20 * 1024 * 1024           # a real model is bigger than this
-# Only answer requests addressed to the loopback host (anti DNS-rebinding).
-ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}", "127.0.0.1", "localhost"}
+APP_ID = "whisper-transcript"                # lets the app recognise its own instance
 
 for d in (UPLOADS_DIR, OUTPUTS_DIR, MODELS_DIR):
     os.makedirs(d, exist_ok=True)
@@ -490,7 +489,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         require a loopback Host header and refuse anything a browser marks as a
         cross-site request (CSRF) or that carries a non-local Origin.
         """
-        if self.headers.get("Host", "") not in ALLOWED_HOSTS:
+        port = self.server.server_address[1]
+        allowed = {f"127.0.0.1:{port}", f"localhost:{port}", "127.0.0.1", "localhost"}
+        if self.headers.get("Host", "") not in allowed:
             self._send_json({"error": "forbidden"}, 403)
             return False
         if (self.headers.get("Sec-Fetch-Site") or "same-origin") not in (
@@ -537,6 +538,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/status":
             model = find_model()
             self._send_json({
+                "app": APP_ID,
                 "model": os.path.basename(model) if model else None,
                 "model_ready": bool(model),
                 "has_models": bool(installed_models()),
@@ -719,7 +721,45 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self.server_port = port
 
 
+def is_our_instance(port):
+    """True if our app is already serving on this port (so don't start a 2nd)."""
+    try:
+        req = urllib.request.Request(
+            f"http://{HOST}:{port}/status", headers={"Host": f"127.0.0.1:{port}"})
+        with urllib.request.urlopen(req, timeout=1) as r:
+            return json.loads(r.read().decode("utf-8")).get("app") == APP_ID
+    except Exception:
+        return False
+
+
+def bind_server():
+    """Bind the preferred port; fall back to a nearby free one if it's taken.
+
+    Returns a listening server, so a busy port never means a silent 'won't load'.
+    """
+    for port in [PORT] + [PORT + i for i in range(1, 20)]:
+        try:
+            return ThreadingServer((HOST, port), Handler)
+        except OSError:
+            continue
+    # Last resort: let the OS pick any free port.
+    return ThreadingServer((HOST, 0), Handler)
+
+
 def main():
+    # If our app is already running, just open that window instead of failing.
+    if is_our_instance(PORT):
+        print(f"Already running — opening http://{HOST}:{PORT}")
+        if os.environ.get("WT_NO_BROWSER") != "1":
+            try:
+                webbrowser.open(f"http://{HOST}:{PORT}")
+            except Exception:
+                pass
+        return
+
+    server = bind_server()
+    port = server.server_address[1]
+    url = f"http://{HOST}:{port}"
     model = find_model()
     print("=" * 60)
     print("  Whisper Transcript App")
@@ -727,13 +767,14 @@ def main():
     print(f"  whisper-cli : {WHISPER_CLI}  {'OK' if have_binary(WHISPER_CLI) else 'MISSING'}")
     print(f"  ffmpeg      : {FFMPEG}  {'OK' if have_binary(FFMPEG) else 'MISSING'}")
     print(f"  model       : {os.path.basename(model) if model else 'none (pick one in the app)'}")
-    print(f"\n  Open:  http://{HOST}:{PORT}\n")
+    if port != PORT:
+        print(f"  note        : port {PORT} was busy, using {port} instead")
+    print(f"\n  Open:  {url}\n")
     print("  (Ctrl+C to quit)")
     print("=" * 60)
-    server = ThreadingServer((HOST, PORT), Handler)
     if os.environ.get("WT_NO_BROWSER") != "1":
         try:
-            webbrowser.open(f"http://{HOST}:{PORT}")
+            webbrowser.open(url)
         except Exception:
             pass
     try:
