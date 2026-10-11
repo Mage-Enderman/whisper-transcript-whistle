@@ -55,7 +55,8 @@ FFMPEG_MAC = "https://evermeet.cx/ffmpeg/ffmpeg-8.1.2.zip"
 FFMPEG_MAC_SHA256 = "e91df72a1ee7c26606f90dd2dd4dcccc6a75140ff9ea6fdd50faae828b82ba69"
 FFMPEG_WIN = ("https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
               "ffmpeg-master-latest-win64-lgpl.zip")
-FFMPEG_WIN_SHA256 = "3407e8a9b79fc56791f78e56ea97e709ac06d8e60b1de592dc63da6a15dfeb4f"
+FFMPEG_WIN_SHA256 = "5d95c02b74e6ad515d4f8bb616fb8e6019d3b1826d3907f6b274852cd45dbdf8"
+
 
 
 def run(cmd, **kw):
@@ -110,35 +111,75 @@ def find_one(root, name):
     return None
 
 
+WHISPER_WIN_PREBUILT = (
+    "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip"
+)
+WHISPER_WIN_PREBUILT_SHA256 = (
+    "7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539"
+)
+
+
+def fetch_whisper_prebuilt():
+    print("=== downloading prebuilt whisper-cli from official release ===")
+    arc = os.path.join(WORK, "whisper_prebuilt.zip")
+    download(WHISPER_WIN_PREBUILT, arc, sha256=WHISPER_WIN_PREBUILT_SHA256)
+    ex = os.path.join(WORK, "whisper_extract")
+    fresh_dir(ex)
+    with zipfile.ZipFile(arc) as z:
+        z.extractall(ex)
+    
+    # Extract whisper-cli.exe and all accompanying .dll files to bin/
+    count = 0
+    for dp, _, files in os.walk(ex):
+        for fn in files:
+            if fn.lower() == "whisper-cli.exe" or fn.lower().endswith(".dll"):
+                src_path = os.path.join(dp, fn)
+                dst_path = os.path.join(BIN, fn)
+                shutil.copy2(src_path, dst_path)
+                count += 1
+    dest = os.path.join(BIN, "whisper-cli" + EXE)
+    if not os.path.exists(dest):
+        raise SystemExit("could not find whisper-cli.exe in prebuilt archive")
+    print(f"whisper-cli & {count - 1} support DLLs -> {BIN}")
+
+
 def build_whisper():
     print("=== building whisper.cpp (static) ===")
     src = os.path.join(WORK, "whisper.cpp")
-    if not os.path.exists(os.path.join(src, "CMakeLists.txt")):
-        fresh_dir(src)
-        run(["git", "clone", "--depth", "1", "--branch", WHISPER_TAG, WHISPER_REPO, src])
-    else:
-        print(f"using existing checkout at {src}")
-    bld = os.path.join(src, "build")
-    cfg = [
-        "cmake", "-S", src, "-B", bld,
-        "-DBUILD_SHARED_LIBS=OFF",
-        "-DWHISPER_BUILD_EXAMPLES=ON",
-        "-DWHISPER_BUILD_TESTS=OFF",
-        "-DCMAKE_BUILD_TYPE=Release",
-    ]
-    run(cfg)
-    run(["cmake", "--build", bld, "--config", "Release", "-j", "4"])
-    binary = find_one(bld, "whisper-cli" + EXE)
-    if not binary:
-        # very old checkouts called it "main"
-        binary = find_one(bld, "main" + EXE)
-    if not binary:
-        raise SystemExit("could not find built whisper-cli binary")
-    dest = os.path.join(BIN, "whisper-cli" + EXE)
-    shutil.copy2(binary, dest)
-    if not IS_WIN:
-        os.chmod(dest, 0o755)
-    print("whisper-cli ->", dest)
+    try:
+        if not os.path.exists(os.path.join(src, "CMakeLists.txt")):
+            fresh_dir(src)
+            run(["git", "clone", "--depth", "1", "--branch", WHISPER_TAG, WHISPER_REPO, src])
+        else:
+            print(f"using existing checkout at {src}")
+        bld = os.path.join(src, "build")
+        cfg = [
+            "cmake", "-S", src, "-B", bld,
+            "-DBUILD_SHARED_LIBS=OFF",
+            "-DWHISPER_BUILD_EXAMPLES=ON",
+            "-DWHISPER_BUILD_TESTS=OFF",
+            "-DCMAKE_BUILD_TYPE=Release",
+        ]
+        run(cfg)
+        run(["cmake", "--build", bld, "--config", "Release", "-j", "4"])
+        binary = find_one(bld, "whisper-cli" + EXE)
+        if not binary:
+            # very old checkouts called it "main"
+            binary = find_one(bld, "main" + EXE)
+        if not binary:
+            raise SystemExit("could not find built whisper-cli binary")
+        dest = os.path.join(BIN, "whisper-cli" + EXE)
+        shutil.copy2(binary, dest)
+        if not IS_WIN:
+            os.chmod(dest, 0o755)
+        print("whisper-cli ->", dest)
+    except Exception as e:
+        if IS_WIN:
+            print(f"\n[NOTE] Local whisper.cpp CMake build failed or no C++ compiler found: {e}")
+            print("[NOTE] Falling back to official whisper.cpp v1.9.1 prebuilt binaries for Windows...\n")
+            fetch_whisper_prebuilt()
+        else:
+            raise
 
 
 def fetch_ffmpeg():
@@ -185,6 +226,12 @@ def bundle():
         "--add-binary", f"{os.path.join(BIN, 'ffmpeg' + EXE)}{sep}bin",
         "--add-binary", f"{os.path.join(BIN, 'whisper-cli' + EXE)}{sep}bin",
     ]
+    # If any helper DLLs were placed into bin (e.g. ggml / SDL2), add them to bin/
+    if os.path.exists(BIN):
+        for f in os.listdir(BIN):
+            if f.lower().endswith(".dll"):
+                args += ["--add-binary", f"{os.path.join(BIN, f)}{sep}bin"]
+
     if IS_MAC:
         # A real .app, no console, quit from the Dock. Opens the browser itself.
         args += ["--windowed", "--name", "Whisper Transcript",

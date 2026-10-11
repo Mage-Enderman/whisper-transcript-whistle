@@ -10,11 +10,15 @@ __pycache__/
 *.pyc
 
 # Build output
+bin/
 build/
 dist/
+_buildwork/
 *.spec
 .icon_build/AppIcon.iconset/
 .modelhide/
+assets/icon.ico
+
 
 # The locally-built Mac app (CI produces the distributable instead)
 Whisper Transcript.app/
