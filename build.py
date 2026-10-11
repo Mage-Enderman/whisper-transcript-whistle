@@ -63,9 +63,21 @@ def run(cmd, **kw):
     subprocess.run(cmd, check=True, **kw)
 
 
+def _handle_remove_readonly(func, path, exc):
+    import stat
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except Exception:
+        pass
+
+
 def fresh_dir(p):
     if os.path.isdir(p):
-        shutil.rmtree(p, ignore_errors=True)
+        try:
+            shutil.rmtree(p, onexc=_handle_remove_readonly)
+        except TypeError:
+            shutil.rmtree(p, onerror=_handle_remove_readonly)
     os.makedirs(p, exist_ok=True)
 
 
@@ -101,8 +113,11 @@ def find_one(root, name):
 def build_whisper():
     print("=== building whisper.cpp (static) ===")
     src = os.path.join(WORK, "whisper.cpp")
-    fresh_dir(WORK)
-    run(["git", "clone", "--depth", "1", "--branch", WHISPER_TAG, WHISPER_REPO, src])
+    if not os.path.exists(os.path.join(src, "CMakeLists.txt")):
+        fresh_dir(src)
+        run(["git", "clone", "--depth", "1", "--branch", WHISPER_TAG, WHISPER_REPO, src])
+    else:
+        print(f"using existing checkout at {src}")
     bld = os.path.join(src, "build")
     cfg = [
         "cmake", "-S", src, "-B", bld,
@@ -176,12 +191,15 @@ def bundle():
                  "--icon", os.path.join(ROOT, "assets", "AppIcon.icns"),
                  "--osx-bundle-identifier", "com.favouryusuf.whispertranscript"]
     else:
-        # Windows: keep a small console window (close it to quit). A tray-icon
-        # "quit" is a future polish.
         ico = make_windows_ico()
         args += ["--name", "WhisperTranscript"]
         if ico:
             args += ["--icon", ico]
+    try:
+        import needle  # noqa
+        args += ["--collect-all", "needle"]
+    except ImportError:
+        pass
     args += ["server.py"]
     run(args)
 

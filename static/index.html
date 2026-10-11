@@ -147,14 +147,31 @@
 
   .pick-title { font-family: var(--serif); font-size: 19px; font-weight: 500; margin-bottom: 5px; }
   .pick-sub { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin-bottom: 18px; }
+
+  /* Model picker category filter tabs */
+  .cat-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cat-tab {
+    padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted); cursor: pointer; font-size: 12px;
+    font-weight: 500; transition: border-color .12s ease, background .12s ease, color .12s ease;
+  }
+  .cat-tab:hover { border-color: var(--accent); color: var(--text); }
+  .cat-tab.active { color: var(--accent-deep); border-color: var(--accent); background: var(--accent-soft); }
+
   .model-list { display: flex; flex-direction: column; gap: 10px; }
   .model-card {
     display: flex; align-items: center; gap: 14px; padding: 15px 16px;
     border: 1px solid var(--border); border-radius: 12px; background: var(--bg);
   }
   .model-card .mc-main { flex: 1; min-width: 0; }
-  .model-card .mc-name { font-weight: 500; }
-  .model-card .mc-name .rec { color: var(--accent); font-size: 11px; margin-left: 7px; }
+  .model-card .mc-name { font-weight: 500; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .model-card .mc-badge {
+    font-size: 10.5px; padding: 2px 7px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 500;
+  }
+  .model-card .mc-badge.whistle { background: #e3f5eb; color: #2e7d4a; }
+  [data-theme="dark"] .model-card .mc-badge.whistle { background: #1c3625; color: #6fbf8e; }
+  .model-card .mc-badge.rec { background: var(--accent-soft); color: var(--accent-deep); }
   .model-card .mc-note { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
   .model-card .mc-size { color: var(--faint); font-size: 12.5px; white-space: nowrap; }
   .model-card .mc-active { color: var(--good); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
@@ -162,6 +179,63 @@
   .pick-back a { color: var(--accent); font-size: 13px; cursor: pointer; }
   .model-badge { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 16px; }
   .model-badge a { color: var(--accent); cursor: pointer; }
+
+  /* Options Bar & Card */
+  .options-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 14px; gap: 8px; flex-wrap: wrap; width: 100%;
+  }
+  .opt-summary { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+  .opt-summary .pill {
+    display: inline-flex; align-items: center; gap: 5px; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 999px; font-size: 12px;
+  }
+  .opt-btn { font-size: 12.5px; padding: 5px 12px; border-radius: 999px; }
+
+  .options-card { margin-top: 14px; padding: 20px 22px; }
+  .opt-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .close-icon-btn { font-size: 14px; padding: 4px 8px; cursor: pointer; line-height: 1; border-radius: 6px; }
+
+  .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+  @media (max-width: 560px) { .opt-grid { grid-template-columns: 1fr; } }
+  .opt-field { display: flex; flex-direction: column; gap: 5px; }
+  .opt-field.full-col { grid-column: 1 / -1; }
+  .opt-label { font-size: 12.5px; font-weight: 500; color: var(--text); }
+  .opt-hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+
+  .opt-select, .opt-input, .opt-textarea {
+    appearance: none; -webkit-appearance: none;
+    background: var(--inset); border: 1px solid var(--border-strong);
+    color: var(--text); border-radius: var(--radius-sm); font-size: 13px;
+    padding: 8px 10px; font-family: inherit; width: 100%; box-sizing: border-box;
+    transition: border-color .12s ease;
+  }
+  .opt-select {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238C867B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat; background-position: right 10px center;
+    background-size: 14px; padding-right: 28px; cursor: pointer;
+  }
+  .opt-select:focus, .opt-input:focus, .opt-textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .opt-textarea { resize: vertical; min-height: 54px; font-family: monospace; font-size: 12px; }
+
+  /* Toggle Switch */
+  .toggle-row { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; margin-top: 2px; }
+  .toggle-row input { display: none; }
+  .toggle-track {
+    width: 34px; height: 19px; background: var(--border-strong); border-radius: 999px;
+    position: relative; transition: background .15s ease; flex-shrink: 0;
+  }
+  .toggle-thumb {
+    width: 15px; height: 15px; background: #fff; border-radius: 50%;
+    position: absolute; top: 2px; left: 2px; transition: transform .15s ease;
+  }
+  .toggle-row input:checked + .toggle-track { background: var(--accent); }
+  .toggle-row input:checked + .toggle-track .toggle-thumb { transform: translateX(15px); }
+  .toggle-text { font-size: 13px; font-weight: 500; color: var(--text); }
+
 </style>
 </head>
 <body>
@@ -190,9 +264,82 @@
   <input type="file" id="fileInput" accept="video/*,audio/*">
   <div id="modelBadge" class="model-badge" style="display:none;"></div>
 
+  <div id="optionsBar" class="options-bar" style="display:none;">
+    <div class="opt-summary" id="optSummary">
+      <span class="pill" id="pillLang">🌐 Auto-detect</span>
+      <span class="pill" id="pillTask">📝 Transcribe</span>
+      <span class="pill" id="pillThreads">⚡ 4 threads</span>
+    </div>
+    <button class="btn ghost opt-btn" id="toggleOptionsBtn">⚙ Options</button>
+  </div>
+
+  <div id="optionsCard" class="card options-card" style="display:none;">
+    <div class="opt-header">
+      <div>
+        <div class="pick-title" style="margin-bottom:2px;">Transcription Options</div>
+        <div class="pick-sub" style="margin-bottom:0;">Settings applied to your video / audio transcription.</div>
+      </div>
+      <button class="btn ghost close-icon-btn" id="closeOptionsBtn" title="Close options">✕</button>
+    </div>
+
+    <div class="opt-grid">
+      <div class="opt-field">
+        <label class="opt-label" for="optLanguage">Audio Language</label>
+        <select class="opt-select" id="optLanguage"></select>
+        <div class="opt-hint" id="whistleLangHint">Auto-detects language or choose one.</div>
+      </div>
+
+      <div class="opt-field">
+        <label class="opt-label">Translate speech</label>
+        <label class="toggle-row">
+          <input type="checkbox" id="optTranslate">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-text">Translate to English</span>
+        </label>
+        <div class="opt-hint">Translates non-English audio to English subtitles.</div>
+      </div>
+
+      <div class="opt-field">
+        <label class="opt-label" for="optThreads">CPU Threads</label>
+        <input type="number" id="optThreads" class="opt-input" min="1" max="64" value="4">
+        <div class="opt-hint">Threads allocated for decoding.</div>
+      </div>
+
+      <div class="opt-field">
+        <label class="opt-label">Voice Activity Detection</label>
+        <label class="toggle-row">
+          <input type="checkbox" id="optVad" checked>
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-text">Filter Silence / VAD</span>
+        </label>
+        <div class="opt-hint">Reduces hallucinations on long silences.</div>
+      </div>
+
+      <div class="opt-field full-col">
+        <label class="opt-label" for="optPrompt">Keywords & Initial Prompt (Optional)</label>
+        <input type="text" id="optPrompt" class="opt-input" placeholder="e.g. proper names, technical acronyms, keywords (comma-separated)">
+        <div class="opt-hint">Biases recognition so unusual words or names are transcribed accurately.</div>
+      </div>
+
+      <div class="opt-field full-col">
+        <label class="opt-label" for="optReplacements">Word Replacements (Optional)</label>
+        <textarea id="optReplacements" class="opt-textarea" rows="2" placeholder="One replacement per line: original -> replacement (e.g. colour -> color)"></textarea>
+        <div class="opt-hint">Automatic find-and-replace applied across output subtitles and markdown.</div>
+      </div>
+    </div>
+  </div>
+
   <div id="modelPicker" class="card" style="display:none;">
     <div class="pick-title">Choose a transcription model</div>
-    <div class="pick-sub">Downloads once to your computer, then runs fully offline. Bigger = more accurate, but a larger download and a bit slower.</div>
+    <div class="pick-sub">Downloads once to your computer, then runs fully offline. Bigger = more accurate, but a larger download.</div>
+    <div class="cat-tabs" id="catTabs">
+      <button class="cat-tab active" data-cat="all">All</button>
+      <button class="cat-tab" data-cat="recommended">Recommended</button>
+      <button class="cat-tab" data-cat="whistle">Whistle (17 MB)</button>
+      <button class="cat-tab" data-cat="english">English (.en)</button>
+      <button class="cat-tab" data-cat="multilingual">Multilingual</button>
+      <button class="cat-tab" data-cat="quantized">Quantized</button>
+    </div>
     <div id="modelList" class="model-list"></div>
     <div class="pick-back" id="pickBack" style="display:none;"><a id="pickBackLink">← back</a></div>
   </div>
@@ -240,7 +387,22 @@ const $ = (s) => document.querySelector(s);
 const drop = $("#drop"), fileInput = $("#fileInput");
 const jobCard = $("#job"), resultCard = $("#result");
 const modelPicker = $("#modelPicker"), modelDownload = $("#modelDownload"), modelBadge = $("#modelBadge");
+const optionsBar = $("#optionsBar"), optionsCard = $("#optionsCard");
+const optLanguage = $("#optLanguage"), optTranslate = $("#optTranslate");
+const optThreads = $("#optThreads"), optVad = $("#optVad");
+const optPrompt = $("#optPrompt"), optReplacements = $("#optReplacements");
+
 let poll = null, dlTimer = null, screen = null, manualPicker = false;
+let cachedLanguages = [], cachedCatalog = [], currentCategory = "all";
+let currentOptions = {
+  language: "auto",
+  translate: false,
+  threads: 4,
+  vad: true,
+  prompt: "",
+  replacements: ""
+};
+let saveTimer = null;
 
 // --- light / dark theme toggle (persisted; defaults to system preference) ---
 $("#themeToggle").addEventListener("click", () => {
@@ -250,14 +412,104 @@ $("#themeToggle").addEventListener("click", () => {
   try { localStorage.setItem("wt-theme", next); } catch(e){}
 });
 
-function prettyModel(fn){ return (fn||"").replace(/^ggml-/,"").replace(/\.bin$/,""); }
+function prettyModel(fn){
+  if (!fn) return "";
+  if (fn === "whistle.cact" || fn.toLowerCase().includes("whistle")) return "Whistle (16.9 MB)";
+  return fn.replace(/^ggml-/,"").replace(/\.bin$/,"");
+}
 
 function showScreen(name){
   screen = name;
   drop.style.display = name === "drop" ? "block" : "none";
   modelBadge.style.display = name === "drop" ? "block" : "none";
+  optionsBar.style.display = name === "drop" ? "flex" : "none";
+  if (name !== "drop") optionsCard.style.display = "none";
   modelPicker.style.display = name === "picker" ? "block" : "none";
   modelDownload.style.display = name === "download" ? "block" : "none";
+}
+
+// --- options loading & saving ---
+async function loadOptions(){
+  try {
+    const data = await (await fetch("/options")).json();
+    if (data.languages) {
+      cachedLanguages = data.languages;
+      renderLanguageSelect(data.languages, currentOptions.language);
+    }
+    if (data.options) {
+      applyOptionsToUI(data.options, false);
+    }
+  } catch(e){}
+}
+
+function renderLanguageSelect(languages, selectedCode){
+  const commonCodes = new Set(['auto', 'en', 'es', 'fr', 'de', 'it', 'nl', 'pl', 'pt', 'ru', 'ja', 'zh', 'ko']);
+  const common = languages.filter(l => commonCodes.has(l.code));
+  const rest = languages.filter(l => !commonCodes.has(l.code) && l.code !== 'auto');
+
+  let html = `<option value="auto">🌐 Auto Detect</option>`;
+  html += `<optgroup label="Common Languages">`;
+  common.filter(l => l.code !== 'auto').forEach(l => {
+    html += `<option value="${l.code}">${l.name} (${l.code})</option>`;
+  });
+  html += `</optgroup><optgroup label="All Other Languages">`;
+  rest.forEach(l => {
+    html += `<option value="${l.code}">${l.name} (${l.code})</option>`;
+  });
+  html += `</optgroup>`;
+  optLanguage.innerHTML = html;
+  optLanguage.value = selectedCode || "auto";
+}
+
+function applyOptionsToUI(opts, shouldSave=true){
+  currentOptions = Object.assign({}, currentOptions, opts);
+  if (optLanguage.value !== currentOptions.language) optLanguage.value = currentOptions.language || "auto";
+  optTranslate.checked = Boolean(currentOptions.translate);
+  optThreads.value = currentOptions.threads || 4;
+  optVad.checked = currentOptions.vad !== false;
+  if (optPrompt.value !== (currentOptions.prompt || "")) optPrompt.value = currentOptions.prompt || "";
+  if (optReplacements.value !== (currentOptions.replacements || "")) optReplacements.value = currentOptions.replacements || "";
+
+  updateOptionPills();
+  checkWhistleLangHint();
+  if (shouldSave) queueSaveOptions();
+}
+
+function updateOptionPills(){
+  const langObj = cachedLanguages.find(l => l.code === currentOptions.language);
+  const langName = langObj ? langObj.name : (currentOptions.language === "auto" ? "Auto-detect" : currentOptions.language);
+  $("#pillLang").textContent = "🌐 " + langName;
+  $("#pillTask").textContent = currentOptions.translate ? "🔄 To English" : "📝 Transcribe";
+  $("#pillThreads").textContent = `⚡ ${currentOptions.threads || 4} threads`;
+}
+
+function checkWhistleLangHint(){
+  const isWhistle = (modelBadge.textContent || "").toLowerCase().includes("whistle");
+  const hint = $("#whistleLangHint");
+  if (!hint) return;
+  if (isWhistle) {
+    const whistleLangs = ['en', 'de', 'fr', 'es', 'it', 'nl', 'pl', 'auto'];
+    if (!whistleLangs.includes(currentOptions.language)) {
+      hint.textContent = "Whistle natively supports EN, DE, FR, ES, IT, NL, PL. Selected language will use auto-detection.";
+      hint.style.color = "var(--accent)";
+      return;
+    }
+  }
+  hint.textContent = "Auto-detects language or specify one.";
+  hint.style.color = "var(--muted)";
+}
+
+function queueSaveOptions(){
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      await fetch("/save_options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentOptions)
+      });
+    } catch(e){}
+  }, 400);
 }
 
 // --- status routing: picker (no model) / download / drop (ready) ---
@@ -267,8 +519,12 @@ async function refreshStatus() {
   const pill = (label, ok) =>
     `<span class="pill"><span class="dot ${ok?'ok':'no'}"></span>${label}</span>`;
   $("#statusBar").innerHTML =
-    pill("Whisper engine", s.whisper) + pill("ffmpeg", s.ffmpeg) +
+    pill("Whisper engine", s.whisper) +
+    pill("Whistle engine", s.whistle) +
+    pill("ffmpeg", s.ffmpeg) +
     pill(s.model_ready ? "Model ready" : "No model yet", s.model_ready);
+
+  if (s.options) applyOptionsToUI(s.options, false);
 
   // Never interrupt an in-progress job or a shown result.
   if (jobCard.style.display === "block" || resultCard.style.display === "block") return;
@@ -284,6 +540,7 @@ async function refreshStatus() {
   }
   if (s.model) {
     modelBadge.innerHTML = `Model: <strong>${prettyModel(s.model)}</strong> · <a id="changeModel">change</a>`;
+    checkWhistleLangHint();
   }
   if (!manualPicker && screen !== "drop") showScreen("drop");
 }
@@ -291,18 +548,39 @@ async function refreshStatus() {
 async function loadModels(){
   let data;
   try { data = await (await fetch("/models")).json(); } catch(e){ return; }
-  const rec = "large-v3-turbo";
-  $("#modelList").innerHTML = data.catalog.map(m => {
+  cachedCatalog = data.catalog;
+  renderModelCatalog();
+}
+
+function renderModelCatalog(){
+  const filtered = cachedCatalog.filter(m => {
+    if (currentCategory === "all") return true;
+    if (currentCategory === "recommended") return m.category === "recommended" || m.name === "large-v3-turbo" || m.name === "whistle";
+    if (currentCategory === "whistle") return m.category === "whistle" || m.name === "whistle";
+    if (currentCategory === "english") return m.category === "english";
+    if (currentCategory === "multilingual") return m.category === "multilingual";
+    if (currentCategory === "quantized") return m.category === "quantized";
+    return true;
+  });
+
+  $("#modelList").innerHTML = filtered.map(m => {
     const right = m.active
       ? `<span class="mc-active">✓ in use</span>`
       : (m.installed
           ? `<button class="btn" data-use="${m.filename}">Use</button>`
           : `<button class="btn primary" data-get="${m.name}">Download</button>`);
-    const recTag = m.name === rec ? `<span class="rec">recommended</span>` : "";
+
+    let badgeHtml = "";
+    if (m.name === "whistle") {
+      badgeHtml = `<span class="mc-badge whistle">16.9 MB · CPU</span>`;
+    } else if (m.badge) {
+      badgeHtml = `<span class="mc-badge ${m.badge === 'Recommended' ? 'rec' : ''}">${m.badge}</span>`;
+    }
+
     const size = m.size_mb >= 1024 ? (m.size_mb/1024).toFixed(1)+" GB" : m.size_mb+" MB";
     return `<div class="model-card">
       <div class="mc-main">
-        <div class="mc-name">${m.label}${recTag}</div>
+        <div class="mc-name">${m.label}${badgeHtml}</div>
         <div class="mc-note">${m.note}</div>
       </div>
       <div class="mc-size">${size}</div>
@@ -341,7 +619,7 @@ async function selectModel(filename){
   refreshStatus();
 }
 
-// delegated clicks for model cards + change/back links
+// delegated clicks for model cards + change/back links + category tabs
 document.addEventListener("click", (e) => {
   const get = e.target.closest("[data-get]");
   if (get){ startDownload(get.getAttribute("data-get")); return; }
@@ -349,8 +627,54 @@ document.addEventListener("click", (e) => {
   if (use){ selectModel(use.getAttribute("data-use")); return; }
   if (e.target.id === "changeModel"){ e.preventDefault(); manualPicker = true; $("#pickBack").style.display="block"; showScreen("picker"); loadModels(); return; }
   if (e.target.id === "pickBackLink"){ manualPicker = false; showScreen("drop"); return; }
+
+  const tab = e.target.closest(".cat-tab");
+  if (tab) {
+    document.querySelectorAll(".cat-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    currentCategory = tab.dataset.cat || "all";
+    renderModelCatalog();
+  }
 });
 
+// Options panel toggling and events
+$("#toggleOptionsBtn").addEventListener("click", () => {
+  optionsCard.style.display = optionsCard.style.display === "none" ? "block" : "none";
+});
+$("#closeOptionsBtn").addEventListener("click", () => {
+  optionsCard.style.display = "none";
+});
+
+optLanguage.addEventListener("change", () => {
+  currentOptions.language = optLanguage.value;
+  updateOptionPills();
+  checkWhistleLangHint();
+  queueSaveOptions();
+});
+optTranslate.addEventListener("change", () => {
+  currentOptions.translate = optTranslate.checked;
+  updateOptionPills();
+  queueSaveOptions();
+});
+optThreads.addEventListener("change", () => {
+  currentOptions.threads = parseInt(optThreads.value, 10) || 4;
+  updateOptionPills();
+  queueSaveOptions();
+});
+optVad.addEventListener("change", () => {
+  currentOptions.vad = optVad.checked;
+  queueSaveOptions();
+});
+optPrompt.addEventListener("input", () => {
+  currentOptions.prompt = optPrompt.value;
+  queueSaveOptions();
+});
+optReplacements.addEventListener("input", () => {
+  currentOptions.replacements = optReplacements.value;
+  queueSaveOptions();
+});
+
+loadOptions();
 refreshStatus(); setInterval(refreshStatus, 4000);
 
 // --- drag & drop ---

@@ -42,12 +42,17 @@ The first time you run it, you choose a transcription model. It downloads once, 
 
 | Model | Size | Best for |
 |---|---|---|
-| Tiny | 75 MB | Quick drafts, any old laptop |
-| Base | 142 MB | Fast, clear speech |
-| Small | 466 MB | A good balance |
+| **Whistle (Cactus)** | **16.9 MB** | **Ultra-fast CPU engine** (EN, DE, FR, ES, IT, NL, PL) |
+| Tiny / Tiny.en | 75 MB | Quick drafts, any laptop |
+| Base / Base.en | 142 MB | Fast, clear speech |
+| Small / Small.en | 466 MB | A good balance of speed & accuracy |
+| Medium / Medium.en | 1.5 GB | High precision speech recognition |
 | **Large v3 Turbo** | 1.5 GB | **Best accuracy (recommended)** |
+| Large v1 / v2 / v3 | 3.0 GB | Maximum accuracy flagship models |
+| Distil-Small / Quantized | 31–547 MB | Memory & download optimized |
 
-Bigger = more accurate but a larger download and a bit slower. You can add or switch models later with the **"change"** link.
+You can add or switch models at any time with the **"change"** link, filter by category tabs, and configure language, translation to English, CPU threads, VAD silence filtering, initial prompts / keywords, and custom word replacements via the **Options** panel.
+
 
 ### 3. Transcribe
 

@@ -26,6 +26,8 @@ import re
 import glob
 import ssl
 import webbrowser
+import math
+import wave
 import urllib.request
 from urllib.parse import urlparse
 
@@ -82,7 +84,7 @@ HOST = "127.0.0.1"
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024   # reject uploads larger than 8 GB
 MAX_JSON_BYTES = 64 * 1024                   # control-plane JSON bodies are tiny
 MAX_JOBS = 50                                # cap in-memory job history
-MODEL_MIN_BYTES = 20 * 1024 * 1024           # a real model is bigger than this
+MODEL_MIN_BYTES = 10 * 1024 * 1024           # 10 MB accommodates Whistle (16.9 MB) and quantized models
 APP_ID = "whisper-transcript"                # lets the app recognise its own instance
 
 for d in (UPLOADS_DIR, OUTPUTS_DIR, MODELS_DIR):
@@ -121,6 +123,27 @@ def have_binary(path):
     return bool(path) and (os.path.exists(path) or shutil.which(path) is not None)
 
 
+WHISTLE_CACHED_INSTANCE = None
+WHISTLE_LOCK = threading.Lock()
+
+
+def is_needle_available():
+    try:
+        import needle  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def get_whistle_model():
+    global WHISTLE_CACHED_INSTANCE
+    with WHISTLE_LOCK:
+        if WHISTLE_CACHED_INSTANCE is None:
+            import needle
+            WHISTLE_CACHED_INSTANCE = needle.Whistle()
+        return WHISTLE_CACHED_INSTANCE
+
+
 # In-memory job store: job_id -> dict
 JOBS = {}
 JOBS_LOCK = threading.Lock()
@@ -130,16 +153,243 @@ JOBS_LOCK = threading.Lock()
 # ----------------------------------------------------------------------------
 HF_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
 
-# Curated set shown in the first-run picker. size_mb is approximate.
+DEFAULT_OPTIONS = {
+    "language": "auto",
+    "translate": False,
+    "threads": 4,
+    "vad": True,
+    "prompt": "",
+    "replacements": ""
+}
+
+WHISTLE_LANGUAGES = {'en', 'de', 'fr', 'es', 'it', 'nl', 'pl'}
+
+LANGUAGES_LIST = [
+    {"code": "auto", "name": "Auto Detect"},
+    {"code": "en", "name": "English"},
+    {"code": "es", "name": "Spanish"},
+    {"code": "fr", "name": "French"},
+    {"code": "de", "name": "German"},
+    {"code": "it", "name": "Italian"},
+    {"code": "nl", "name": "Dutch"},
+    {"code": "pl", "name": "Polish"},
+    {"code": "pt", "name": "Portuguese"},
+    {"code": "ru", "name": "Russian"},
+    {"code": "ja", "name": "Japanese"},
+    {"code": "zh", "name": "Chinese"},
+    {"code": "ko", "name": "Korean"},
+    {"code": "ar", "name": "Arabic"},
+    {"code": "tr", "name": "Turkish"},
+    {"code": "uk", "name": "Ukrainian"},
+    {"code": "vi", "name": "Vietnamese"},
+    {"code": "hi", "name": "Hindi"},
+    {"code": "id", "name": "Indonesian"},
+    {"code": "sv", "name": "Swedish"},
+    {"code": "cs", "name": "Czech"},
+    {"code": "el", "name": "Greek"},
+    {"code": "fi", "name": "Finnish"},
+    {"code": "he", "name": "Hebrew"},
+    {"code": "hu", "name": "Hungarian"},
+    {"code": "no", "name": "Norwegian"},
+    {"code": "da", "name": "Danish"},
+    {"code": "ro", "name": "Romanian"},
+    {"code": "th", "name": "Thai"},
+    {"code": "ca", "name": "Catalan"},
+    {"code": "sk", "name": "Slovak"},
+    {"code": "bg", "name": "Bulgarian"},
+    {"code": "hr", "name": "Croatian"},
+    {"code": "lt", "name": "Lithuanian"},
+    {"code": "ms", "name": "Malay"},
+    {"code": "sl", "name": "Slovenian"},
+    {"code": "sr", "name": "Serbian"},
+    {"code": "et", "name": "Estonian"},
+    {"code": "lv", "name": "Latvian"},
+    {"code": "fa", "name": "Persian"},
+    {"code": "ur", "name": "Urdu"},
+    {"code": "ta", "name": "Tamil"},
+    {"code": "te", "name": "Telugu"},
+    {"code": "bn", "name": "Bengali"},
+    {"code": "kn", "name": "Kannada"},
+    {"code": "ml", "name": "Malayalam"},
+    {"code": "mr", "name": "Marathi"},
+    {"code": "gu", "name": "Gujarati"},
+    {"code": "pa", "name": "Punjabi"},
+    {"code": "af", "name": "Afrikaans"},
+    {"code": "az", "name": "Azerbaijani"},
+    {"code": "ba", "name": "Bashkir"},
+    {"code": "be", "name": "Belarusian"},
+    {"code": "bs", "name": "Bosnian"},
+    {"code": "cy", "name": "Welsh"},
+    {"code": "eu", "name": "Basque"},
+    {"code": "gl", "name": "Galician"},
+    {"code": "hy", "name": "Armenian"},
+    {"code": "is", "name": "Icelandic"},
+    {"code": "jw", "name": "Javanese"},
+    {"code": "ka", "name": "Georgian"},
+    {"code": "kk", "name": "Kazakh"},
+    {"code": "km", "name": "Khmer"},
+    {"code": "la", "name": "Latin"},
+    {"code": "lo", "name": "Lao"},
+    {"code": "mk", "name": "Macedonian"},
+    {"code": "mn", "name": "Mongolian"},
+    {"code": "my", "name": "Myanmar"},
+    {"code": "ne", "name": "Nepali"},
+    {"code": "sq", "name": "Albanian"},
+    {"code": "sw", "name": "Swahili"},
+    {"code": "uz", "name": "Uzbek"}
+]
+
+# Comprehensive model catalog (Whistle + all Whisper model tiers)
 MODEL_CATALOG = [
-    {"name": "tiny",           "size_mb": 75,   "label": "Tiny",
-     "note": "Fastest, roughest. Runs on any laptop."},
-    {"name": "base",           "size_mb": 142,  "label": "Base",
-     "note": "Fast, fine for clear speech."},
-    {"name": "small",          "size_mb": 466,  "label": "Small",
-     "note": "Balanced speed and accuracy."},
-    {"name": "large-v3-turbo", "size_mb": 1536, "label": "Large v3 Turbo",
-     "note": "Best accuracy, still fast. Recommended."},
+    # Whistle
+    {
+        "name": "whistle",
+        "size_mb": 17,
+        "label": "Whistle (Cactus)",
+        "category": "whistle",
+        "badge": "16.9 MB · CPU",
+        "note": "Ultra-fast CPU engine in 16.9 MB. Supports English, German, French, Spanish, Italian, Dutch, Polish."
+    },
+    # Whisper Recommended & Multilingual
+    {
+        "name": "large-v3-turbo",
+        "size_mb": 1536,
+        "label": "Large v3 Turbo",
+        "category": "recommended",
+        "badge": "Recommended",
+        "note": "Best accuracy, fast inference across 99 languages. Recommended."
+    },
+    {
+        "name": "small",
+        "size_mb": 466,
+        "label": "Small",
+        "category": "multilingual",
+        "note": "Balanced speed and accuracy across 99 languages."
+    },
+    {
+        "name": "base",
+        "size_mb": 142,
+        "label": "Base",
+        "category": "multilingual",
+        "note": "Fast, fine for clear speech."
+    },
+    {
+        "name": "tiny",
+        "size_mb": 75,
+        "label": "Tiny",
+        "category": "multilingual",
+        "note": "Fastest Whisper model, roughest accuracy. Runs on any computer."
+    },
+    {
+        "name": "medium",
+        "size_mb": 1462,
+        "label": "Medium",
+        "category": "multilingual",
+        "note": "High-accuracy multilingual Whisper model."
+    },
+    {
+        "name": "large-v3",
+        "size_mb": 2951,
+        "label": "Large v3",
+        "category": "multilingual",
+        "note": "Flagship OpenAI model with highest multilingual accuracy."
+    },
+    {
+        "name": "large-v2",
+        "size_mb": 2951,
+        "label": "Large v2",
+        "category": "multilingual",
+        "note": "High-precision predecessor to Large v3."
+    },
+    {
+        "name": "large-v1",
+        "size_mb": 2951,
+        "label": "Large v1",
+        "category": "multilingual",
+        "note": "Original OpenAI large model."
+    },
+    # Whisper English-Only (.en)
+    {
+        "name": "small.en",
+        "size_mb": 466,
+        "label": "Small (English)",
+        "category": "english",
+        "badge": "English-only",
+        "note": "Optimized specifically for English. Faster and more accurate than multilingual Small on English."
+    },
+    {
+        "name": "base.en",
+        "size_mb": 142,
+        "label": "Base (English)",
+        "category": "english",
+        "badge": "English-only",
+        "note": "Fast English-only model."
+    },
+    {
+        "name": "tiny.en",
+        "size_mb": 75,
+        "label": "Tiny (English)",
+        "category": "english",
+        "badge": "English-only",
+        "note": "Ultra-lightweight English-only model."
+    },
+    {
+        "name": "medium.en",
+        "size_mb": 1462,
+        "label": "Medium (English)",
+        "category": "english",
+        "badge": "English-only",
+        "note": "High accuracy English-only model."
+    },
+    {
+        "name": "distil-small.en",
+        "size_mb": 320,
+        "label": "Distil-Small (English)",
+        "category": "english",
+        "badge": "Distil · Fast",
+        "note": "Distilled, lightweight English model from HuggingFace."
+    },
+    # Quantized
+    {
+        "name": "large-v3-turbo-q5_0",
+        "size_mb": 547,
+        "label": "Large v3 Turbo (q5_0)",
+        "category": "quantized",
+        "badge": "Quantized",
+        "note": "5-bit quantized Large v3 Turbo. ~3x smaller download with near-identical accuracy."
+    },
+    {
+        "name": "medium-q5_0",
+        "size_mb": 515,
+        "label": "Medium (q5_0)",
+        "category": "quantized",
+        "badge": "Quantized",
+        "note": "5-bit quantized Medium model."
+    },
+    {
+        "name": "small-q5_1",
+        "size_mb": 182,
+        "label": "Small (q5_1)",
+        "category": "quantized",
+        "badge": "Quantized",
+        "note": "Quantized Small model for low-memory machines."
+    },
+    {
+        "name": "base-q5_1",
+        "size_mb": 57,
+        "label": "Base (q5_1)",
+        "category": "quantized",
+        "badge": "Quantized",
+        "note": "Quantized Base model."
+    },
+    {
+        "name": "tiny-q5_1",
+        "size_mb": 31,
+        "label": "Tiny (q5_1)",
+        "category": "quantized",
+        "badge": "Quantized",
+        "note": "Quantized Tiny model in only 31 MB."
+    }
 ]
 
 # Single active download at a time.
@@ -148,6 +398,10 @@ DL_LOCK = threading.Lock()
 
 
 def model_filename(name):
+    if name == "whistle" or name.endswith(".cact"):
+        return "whistle.cact"
+    if name.startswith("ggml-"):
+        return f"{name}.bin" if not name.endswith(".bin") else name
     return f"ggml-{name}.bin"
 
 
@@ -169,7 +423,7 @@ def _read_config():
 def _write_config(cfg):
     try:
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f)
+            json.dump(cfg, f, indent=2)
     except OSError:
         pass
 
@@ -177,6 +431,19 @@ def _write_config(cfg):
 def installed_models():
     """Basenames of fully-downloaded models (ignores .part files)."""
     out = []
+    # If needle cache has whistle.cact, ensure it's copied to MODELS_DIR
+    whistle_dest = os.path.join(MODELS_DIR, "whistle.cact")
+    if not os.path.exists(whistle_dest):
+        cache_cact = os.path.expanduser("~/.cache/cactus-needle/whistle/2.0.0/whistle.cact")
+        if os.path.exists(cache_cact) and os.path.getsize(cache_cact) > MODEL_MIN_BYTES:
+            try:
+                shutil.copy2(cache_cact, whistle_dest)
+            except Exception:
+                pass
+
+    if os.path.exists(whistle_dest) and os.path.getsize(whistle_dest) > MODEL_MIN_BYTES:
+        out.append("whistle.cact")
+
     for b in sorted(glob.glob(os.path.join(MODELS_DIR, "ggml-*.bin"))):
         if os.path.getsize(b) > MODEL_MIN_BYTES:
             out.append(os.path.basename(b))
@@ -191,20 +458,47 @@ def find_model():
     want = _read_config().get("model")
     if want and want in installed:
         return os.path.join(MODELS_DIR, want)
-    # Default: the largest installed model (usually the most capable).
+    # Default: prefer whistle.cact if installed, otherwise largest installed model
+    if "whistle.cact" in installed:
+        return os.path.join(MODELS_DIR, "whistle.cact")
     best = max(installed,
                key=lambda n: os.path.getsize(os.path.join(MODELS_DIR, n)))
     return os.path.join(MODELS_DIR, best)
 
 
 def download_model(name):
-    """Background worker: fetch ggml-<name>.bin from Hugging Face with progress."""
-    url = HF_BASE + model_filename(name)
-    dest = os.path.join(MODELS_DIR, model_filename(name))
+    """Background worker: fetch model from Hugging Face (or local needle cache) with progress."""
+    fname = model_filename(name)
+    dest = os.path.join(MODELS_DIR, fname)
     part = dest + ".part"
     had_models = bool(installed_models())  # true first-run download auto-activates
+
     with DL_LOCK:
         DL.update(active=True, name=name, pct=0, done=False, error=None)
+
+    # Fast path for Whistle if needle already cached it
+    if name == "whistle":
+        cache_cact = os.path.expanduser("~/.cache/cactus-needle/whistle/2.0.0/whistle.cact")
+        if os.path.exists(cache_cact) and os.path.getsize(cache_cact) > MODEL_MIN_BYTES:
+            try:
+                shutil.copy2(cache_cact, dest)
+                if not had_models:
+                    cfg = _read_config()
+                    cfg["model"] = fname
+                    _write_config(cfg)
+                with DL_LOCK:
+                    DL.update(active=False, pct=100, done=True)
+                return
+            except Exception:
+                pass
+
+    if name == "whistle":
+        url = "https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact"
+    elif name == "distil-small.en":
+        url = "https://huggingface.co/distil-whisper/distil-small.en/resolve/main/ggml-distil-small.en.bin"
+    else:
+        url = HF_BASE + fname
+
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "WhisperTranscript"})
         with urllib.request.urlopen(req, timeout=30, context=ssl_context()) as resp:
@@ -221,15 +515,13 @@ def download_model(name):
                         with DL_LOCK:
                             DL["pct"] = int(got * 100 / total)
         os.replace(part, dest)
-        # Only the very first model auto-activates; later downloads don't
-        # hijack the user's current selection (they click "Use" to switch).
         if not had_models:
             cfg = _read_config()
-            cfg["model"] = model_filename(name)
+            cfg["model"] = fname
             _write_config(cfg)
         with DL_LOCK:
             DL.update(active=False, pct=100, done=True)
-    except Exception as e:  # noqa
+    except Exception as e:
         try:
             if os.path.exists(part):
                 os.remove(part)
@@ -242,6 +534,7 @@ def download_model(name):
 def dl_state():
     with DL_LOCK:
         return dict(DL)
+
 
 
 # ----------------------------------------------------------------------------
@@ -361,32 +654,184 @@ def append_log(job_id, msg):
             JOBS[job_id]["log"].append(msg)
 
 
+def format_srt_time(sec):
+    total_ms = int(round(sec * 1000))
+    ms = total_ms % 1000
+    total_s = total_ms // 1000
+    s = total_s % 60
+    total_m = total_s // 60
+    m = total_m % 60
+    h = total_m // 60
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def parse_replacements(repl_str):
+    repls = []
+    if not repl_str:
+        return repls
+    for line in repl_str.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "->" in line:
+            parts = line.split("->", 1)
+        elif ":" in line:
+            parts = line.split(":", 1)
+        elif "," in line:
+            parts = line.split(",", 1)
+        else:
+            continue
+        orig, target = parts[0].strip(), parts[1].strip()
+        if orig:
+            repls.append((orig, target))
+    return repls
+
+
+def apply_replacements(text, repl_str):
+    repls = parse_replacements(repl_str)
+    if not repls or not text:
+        return text
+    for orig, target in repls:
+        pattern = re.compile(re.escape(orig), re.IGNORECASE)
+        text = pattern.sub(target, text)
+    return text
+
+
+def transcribe_whistle_audio(wav_path, job_id, options, out_prefix):
+    """Transcribes audio using the Whistle STT engine in chunks with timestamps."""
+    if not is_needle_available():
+        raise RuntimeError("The Whistle engine ('cactus-needle') is not installed in Python. Run 'pip install cactus-needle[mic]' to use Whistle.")
+
+    w = get_whistle_model()
+    append_log(job_id, "Using Whistle STT engine (16.9 MB CPU model)…")
+
+    lang = options.get("language")
+    if lang in ("", "auto", None):
+        lang = None
+    elif lang not in WHISTLE_LANGUAGES:
+        append_log(job_id, f"Note: Whistle natively supports {sorted(list(WHISTLE_LANGUAGES))}. '{lang}' will use auto-detection.")
+        lang = None
+
+    prompt = options.get("prompt", "")
+    keywords = None
+    if prompt:
+        keywords = [k.strip() for k in re.split(r"[,;\n]", prompt) if k.strip()]
+        if not keywords:
+            keywords = None
+
+    with wave.open(wav_path, 'rb') as wf:
+        n_channels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+        framerate = wf.getframerate()
+        n_frames = wf.getnframes()
+
+    CHUNK_SEC = 25.0
+    CHUNK_FRAMES = int(CHUNK_SEC * framerate)
+    total_chunks = max(1, int(math.ceil(n_frames / CHUNK_FRAMES)))
+
+    all_segments = []
+
+    with wave.open(wav_path, 'rb') as wf:
+        for chunk_idx in range(total_chunks):
+            chunk_frames = wf.readframes(CHUNK_FRAMES)
+            if not chunk_frames:
+                break
+
+            chunk_start_sec = chunk_idx * CHUNK_SEC
+            chunk_frames_count = len(chunk_frames) // (n_channels * sampwidth)
+            chunk_duration = chunk_frames_count / float(framerate)
+            chunk_end_sec = chunk_start_sec + chunk_duration
+
+            chunk_wav = os.path.join(OUTPUTS_DIR, f"{job_id}_chk_{chunk_idx}.wav")
+            try:
+                with wave.open(chunk_wav, 'wb') as cwf:
+                    cwf.setnchannels(n_channels)
+                    cwf.setsampwidth(sampwidth)
+                    cwf.setframerate(framerate)
+                    cwf.writeframes(chunk_frames)
+
+                res = w.transcribe(chunk_wav, language=lang, keywords=keywords, word_timestamps=True)
+                words = res.get("words", [])
+                chunk_text = res.get("text", "").strip()
+
+                if words:
+                    cur_phrase = []
+                    phrase_start = None
+                    for word_info in words:
+                        w_text = word_info.get("word") or word_info.get("text") or ""
+                        w_start = chunk_start_sec + float(word_info.get("start", 0.0))
+                        w_end = chunk_start_sec + float(word_info.get("end", 0.0))
+
+                        if phrase_start is None:
+                            phrase_start = w_start
+                        cur_phrase.append(w_text)
+
+                        if any(w_text.endswith(p) for p in ('.', '!', '?', ';', ':')) or len(cur_phrase) >= 8:
+                            all_segments.append((phrase_start, w_end, " ".join(cur_phrase).strip()))
+                            cur_phrase = []
+                            phrase_start = None
+                    if cur_phrase:
+                        all_segments.append((phrase_start, chunk_end_sec, " ".join(cur_phrase).strip()))
+                elif chunk_text:
+                    all_segments.append((chunk_start_sec, chunk_end_sec, chunk_text))
+
+            finally:
+                if os.path.exists(chunk_wav):
+                    try:
+                        os.remove(chunk_wav)
+                    except OSError:
+                        pass
+
+            pct = 5 + int(((chunk_idx + 1) / total_chunks) * 94)
+            set_job(job_id, progress=min(pct, 99))
+
+    srt_lines = []
+    idx = 1
+    for start, end, text in all_segments:
+        text = text.strip()
+        if not text:
+            continue
+        srt_lines.append(str(idx))
+        srt_lines.append(f"{format_srt_time(start)} --> {format_srt_time(end)}")
+        srt_lines.append(text)
+        srt_lines.append("")
+        idx += 1
+
+    return "\n".join(srt_lines)
+
+
 def run_job(job_id, video_path, original_name):
     base = os.path.splitext(original_name)[0]
     safe_base = re.sub(r"[^A-Za-z0-9 ._-]", "_", base).strip() or "transcript"
     out_prefix = os.path.join(OUTPUTS_DIR, f"{job_id}__{safe_base}")
     wav_path = out_prefix + ".wav"
 
+    cfg = _read_config()
+    options = cfg.get("options", DEFAULT_OPTIONS)
+
     try:
         if not have_binary(FFMPEG):
             set_job(job_id, status="error",
                     error="ffmpeg was not found. It should ship with the app — try reinstalling.")
             return
-        if not have_binary(WHISPER_CLI):
-            set_job(job_id, status="error",
-                    error="The Whisper engine (whisper-cli) was not found. It should ship with the app — try reinstalling.")
-            return
+
         model = find_model()
         if not model:
             set_job(job_id, status="error",
-                    error="No Whisper model installed yet. Pick a model on the start screen and let it download.")
+                    error="No model installed yet. Pick a model on the start screen and let it download.")
+            return
+
+        is_whistle = os.path.basename(model).lower().startswith("whistle")
+
+        if not is_whistle and not have_binary(WHISPER_CLI):
+            set_job(job_id, status="error",
+                    error="The Whisper engine (whisper-cli) was not found. It should ship with the app — try reinstalling, or use Whistle.")
             return
 
         set_job(job_id, status="extracting", progress=2, model=os.path.basename(model))
         append_log(job_id, "Extracting audio with ffmpeg…")
 
-        # 1) Extract 16kHz mono PCM wav (audio extraction is fast even for long
-        # files; a 2h ceiling just stops a wedged process from hanging forever).
+        # 1) Extract 16kHz mono PCM wav
         try:
             ff = subprocess.run(
                 [FFMPEG, "-y", "-i", video_path, "-ar", "16000", "-ac", "1",
@@ -404,41 +849,75 @@ def run_job(job_id, video_path, original_name):
                     error=f"ffmpeg could not read this file.\n\n{tail}")
             return
 
-        append_log(job_id, "Audio ready. Transcribing with Whisper…")
+        append_log(job_id, "Audio ready. Transcribing…")
         set_job(job_id, status="transcribing", progress=5)
 
-        # 2) Whisper transcription (stream progress)
-        cmd = [
-            WHISPER_CLI,
-            "-m", model,
-            "-f", wav_path,
-            "-osrt",
-            "-otxt",
-            "-of", out_prefix,
-            "-pp",            # print progress
-            "-l", "auto",     # auto-detect language
-        ]
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, bufsize=1)
-        prog_re = re.compile(r"progress\s*=\s*(\d+)%")
-        for line in proc.stdout:
-            m = prog_re.search(line)
-            if m:
-                pct = int(m.group(1))
-                # map whisper's 0-100 onto 5-99
-                set_job(job_id, progress=5 + int(pct * 0.94))
-        proc.wait()
-
         srt_path = out_prefix + ".srt"
-        if proc.returncode != 0 or not os.path.exists(srt_path):
-            set_job(job_id, status="error",
-                    error="Whisper finished without producing a transcript. The audio may be silent or unsupported.")
-            return
 
-        # 3) Read SRT, build markdown
-        with open(srt_path, "r", encoding="utf-8") as f:
-            srt_text = f.read()
+        if is_whistle:
+            srt_text = transcribe_whistle_audio(wav_path, job_id, options, out_prefix)
+            if not srt_text.strip():
+                set_job(job_id, status="error",
+                        error="Whistle finished without producing a transcript. The audio may be silent or unsupported.")
+                return
+            with open(srt_path, "w", encoding="utf-8") as f:
+                f.write(srt_text)
+        else:
+            cmd = [
+                WHISPER_CLI,
+                "-m", model,
+                "-f", wav_path,
+                "-osrt",
+                "-otxt",
+                "-of", out_prefix,
+                "-pp",
+            ]
+            lang = options.get("language", "auto")
+            if lang and lang != "auto":
+                cmd.extend(["-l", lang])
+            else:
+                cmd.extend(["-l", "auto"])
+
+            if options.get("translate"):
+                cmd.append("-tr")
+
+            threads = options.get("threads")
+            if threads and int(threads) > 0:
+                cmd.extend(["-t", str(threads)])
+
+            prompt = options.get("prompt")
+            if prompt:
+                cmd.extend(["--prompt", prompt])
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True, bufsize=1)
+            prog_re = re.compile(r"progress\s*=\s*(\d+)%")
+            for line in proc.stdout:
+                m = prog_re.search(line)
+                if m:
+                    pct = int(m.group(1))
+                    set_job(job_id, progress=5 + int(pct * 0.94))
+            proc.wait()
+
+            if proc.returncode != 0 or not os.path.exists(srt_path):
+                set_job(job_id, status="error",
+                        error="Whisper finished without producing a transcript. The audio may be silent or unsupported.")
+                return
+
+            with open(srt_path, "r", encoding="utf-8") as f:
+                srt_text = f.read()
+
+        # Apply word replacements
+        repl_str = options.get("replacements", "")
+        if repl_str:
+            srt_text = apply_replacements(srt_text, repl_str)
+            with open(srt_path, "w", encoding="utf-8") as f:
+                f.write(srt_text)
+
+        # Build markdown
         md_text = srt_to_markdown(srt_text, safe_base)
+        if repl_str:
+            md_text = apply_replacements(md_text, repl_str)
         md_path = out_prefix + ".md"
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_text)
@@ -453,12 +932,11 @@ def run_job(job_id, video_path, original_name):
                 md_text=md_text,
                 download_base=f"{safe_base}")
 
-    except Exception as e:  # noqa
+    except Exception as e:
         sys.stderr.write(f"[whisper-transcript] job {job_id} failed: {e}\n")
         set_job(job_id, status="error",
-                error="Something went wrong while processing this file.")
+                error=f"Processing failed: {str(e)}")
     finally:
-        # clean intermediate wav + uploaded video to save space
         for p in (wav_path, video_path):
             try:
                 if p and os.path.exists(p):
@@ -537,6 +1015,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/status":
             model = find_model()
+            cfg = _read_config()
             self._send_json({
                 "app": APP_ID,
                 "model": os.path.basename(model) if model else None,
@@ -544,7 +1023,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "has_models": bool(installed_models()),
                 "whisper": have_binary(WHISPER_CLI),
                 "ffmpeg": have_binary(FFMPEG),
+                "whistle": is_needle_available(),
                 "download": dl_state(),
+                "options": cfg.get("options", DEFAULT_OPTIONS),
+            })
+            return
+
+        if path == "/options":
+            cfg = _read_config()
+            self._send_json({
+                "options": cfg.get("options", DEFAULT_OPTIONS),
+                "languages": LANGUAGES_LIST,
+                "whistle_languages": list(WHISTLE_LANGUAGES),
             })
             return
 
@@ -557,6 +1047,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "label": m["label"],
                 "size_mb": m["size_mb"],
                 "note": m["note"],
+                "category": m.get("category", "multilingual"),
+                "badge": m.get("badge", ""),
                 "filename": model_filename(m["name"]),
                 "installed": model_filename(m["name"]) in installed,
                 "active": model_filename(m["name"]) == active_name,
@@ -657,6 +1149,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             cfg["model"] = fname
             _write_config(cfg)
             self._send_json({"ok": True, "model": fname})
+            return
+
+        if path == "/save_options":
+            body = self._read_json_body()
+            cfg = _read_config()
+            cfg["options"] = body
+            _write_config(cfg)
+            self._send_json({"ok": True, "options": body})
             return
 
         if path != "/upload":
